@@ -12,8 +12,9 @@ whole suite, and count how many tests notice. Restore, move to the next site.
 A site whose removal nothing notices is a check whose failure path is unverified. A
 regression there ships green.
 
-Three things this script guards against, each of which produced a wrong answer during
-development:
+Five things this script guards against, each of which produced a wrong answer during
+development. They are all the same sentence: a thing that did not happen must not be
+reportable as a thing that does not matter.
 
 - **A green baseline is a precondition, not an assumption.** Mutating a suite that is
   already red measures nothing, so the baseline is run first and a non-green one aborts.
@@ -21,6 +22,17 @@ development:
   rewrite is verified to have changed the file before the suite is run. A no-op mutation
   that left the suite green would otherwise be recorded as "nothing notices".
 - **An empty site list would report perfect coverage.** Zero sites aborts.
+- **A suite that did not run against this code looks exactly like a suite that notices
+  nothing.** A stale editable install, or any `trace_tests` earlier on `sys.path`, leaves
+  the baseline green and every mutation unobserved: pytest never imports the file being
+  rewritten, and the run reports zero verified. The import path is checked against this
+  checkout before the baseline.
+- **A stale `__pycache__` reports a margin the code does not have.** `Status.FAIL` and
+  `Status.PASS` are the same length, so a rewrite changes no file size; between that and
+  pytest's own rewritten-assertion caches, a run can measure the previous iteration's
+  bytecode. This one is the worst of the five, because it fails *upward*: it inflates
+  margins and reports checks as verified that nothing guards. Caches are purged before
+  every suite run.
 
 Counting fixtures that *name* a check is not this measurement, and gives a very different
 answer: on the tree measured here the name-based proxy reported 12 unverified checks where
@@ -36,6 +48,7 @@ import ast
 import collections
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -106,8 +119,51 @@ def fail_sites() -> list[Site]:
     return sites
 
 
+def verify_import_path() -> None:
+    """The suite must import `trace_tests` from this checkout, not from anywhere else.
+
+    A stale editable install, or any `trace_tests` earlier on `sys.path`, leaves the
+    baseline green and every mutation unobserved: pytest never imports the file being
+    rewritten. The run then reports zero checks verified, which is indistinguishable
+    from a suite that guards nothing.
+    """
+    probe = "import trace_tests, sys; sys.stdout.write(trace_tests.__file__ or '')"
+    resolved = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=TRACE_TESTS,
+        capture_output=True,
+        text=True,
+    )
+    imported = Path(resolved.stdout.strip()).resolve() if resolved.stdout.strip() else None
+    expected = (TRACE_TESTS / "src" / "trace_tests").resolve()
+    if imported is None or expected not in imported.parents:
+        sys.exit(
+            f"the suite imports trace_tests from {imported or '<not importable>'}, not from "
+            f"{expected}.\nEvery mutation would rewrite a file nothing imports, the suite "
+            "would stay green, and the run would report zero checks verified - which reads "
+            "as 'nothing is guarded' when the truth is 'nothing was measured'.\n"
+            "Fix: pip install -e . in this checkout, or remove the competing install from "
+            "sys.path."
+        )
+    print(f"imports:  {imported}")
+
+
+def _purge_caches() -> None:
+    """Remove every `__pycache__` under the checkout.
+
+    `Status.FAIL` and `Status.PASS` are the same length, so a rewrite leaves the file
+    size unchanged; combined with pytest's cached rewritten assertions, a run can end up
+    measuring the previous iteration's bytecode. That inflates margins and reports
+    unguarded checks as verified, which is the one direction this instrument must never
+    fail in.
+    """
+    for cache in TRACE_TESTS.rglob("__pycache__"):
+        shutil.rmtree(cache, ignore_errors=True)
+
+
 def run_suite() -> int:
     """Return the number of failing tests. No `-x`: the count is the margin."""
+    _purge_caches()
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "--no-header", "--tb=no", "-p", "no:cacheprovider"],
         cwd=TRACE_TESTS,
@@ -124,6 +180,7 @@ def main() -> int:
         sys.exit("no FAIL sites found; the walk matched nothing and would report perfectly")
 
     print(f"checkout: {TRACE_TESTS}")
+    verify_import_path()
     print(f"modules:  {len(MODULES)}   FAIL sites: {len(sites)}\n")
 
     baseline = run_suite()
