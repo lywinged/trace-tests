@@ -14,6 +14,11 @@ def load_vector(filename):
     return json.loads((VECTORS_DIR / filename).read_text())
 
 
+@pytest.fixture(name="load_vector")
+def load_vector_fixture():
+    return load_vector
+
+
 def load_schema():
     return json.loads((SCHEMAS_DIR / "trace-claim.json").read_text())
 
@@ -26,7 +31,9 @@ def _canonical_json(d: dict) -> bytes:
     return json.dumps(d, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
-def _build_signed_cmcp_record(*, platform: str = "tpm2", nonce: str | None = None) -> tuple[dict, Ed25519PrivateKey]:
+def _build_signed_cmcp_record(
+    *, platform: str = "tpm2", nonce: str | None = None
+) -> tuple[dict, Ed25519PrivateKey]:
     """Return (record, private_key) for a fully-signed cmcp-runtime claim.
 
     The signature covers the canonical JSON of the envelope with the 'signature'
@@ -89,6 +96,20 @@ def valid_level0_with_transcript():
 @pytest.fixture
 def invalid_missing_runtime():
     return load_vector("invalid_missing_runtime.json")
+
+
+@pytest.fixture
+def signed_root():
+    """A signed Trust Record with no delegation block, from trace-spec's
+    `examples/delegation-link/01-valid-single-hop.json`."""
+    return load_vector("signed_root.json")
+
+
+@pytest.fixture
+def signed_delegated_hop():
+    """The delegated hop from the same chain: signed, and carrying a
+    `delegation` block."""
+    return load_vector("signed_delegated_hop.json")
 
 
 @pytest.fixture

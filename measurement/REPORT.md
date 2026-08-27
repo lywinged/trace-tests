@@ -10,7 +10,9 @@ level up worth asking, and as far as the repository shows, unasked so far:
 > If a check inside a conformance module silently stopped working, would the
 > repository's own test suite catch it?
 
-For most checks, yes. For ten of the thirty-three failure paths, no.
+When this was first measured, the answer was no for ten of the thirty-three failure
+paths. Those ten are now guarded, and the measurement is what established which ones
+needed it.
 
 ---
 
@@ -21,25 +23,32 @@ modules   7        src/trace_tests/modules/tr_*.py
 checks    18       distinct TR-xxx-nnn codes
 sites     33       Finding(..., Status.FAIL, ...) constructions
 
-by check   15 of 18 verified,  3 unverified
-by site    23 of 33 verified, 10 unverified
-
-site margin distribution   0→10   1→12   2→6   3→1   4→3   5→1
+by check   18 of 18 verified,  0 unverified
+by site    33 of 33 verified,  0 unverified
 ```
 
-**Counting by check understates it by more than threefold.** A check code emitted from
-three places can have one failure path nothing verifies while the other two are covered,
-and it still counts as verified. The sites are where the checks actually live.
+Eight checks sit at margin 1, meaning exactly one test stands between them and silent
+regression. That is a floor, not a comfortable state, and it is the number to watch.
 
-### The three checks nothing verifies at all
+### What the first measurement found
 
-| Check | What it enforces | Sites |
+| Check | What it enforces | Sites then unverified |
 |---|---|---|
-| `TR-SIG-002` | `cnf.jwk` is an OKP/Ed25519 key and carries `x` | 2 of 2 unverified |
-| `TR-TXN-001` | `tool_transcript` is present at Level 2, is an object, and its hash is a well-formed digest | 3 of 3 unverified |
-| `TR-TXN-002` | `tool_transcript.call_count` is a non-negative integer | 1 of 1 unverified |
+| `TR-SIG-002` | `cnf.jwk` is an OKP/Ed25519 key and carries `x` | 2 of 2 |
+| `TR-TXN-001` | `tool_transcript` is present at Level 2, is an object, and its hash is a well-formed digest | 3 of 3 |
+| `TR-TXN-002` | `tool_transcript.call_count` is a non-negative integer | 1 of 1 |
+| `TR-SCA-001` | `build_provenance` is an object | 1 site |
+| `TR-SIG-004` | `cnf.jwk.kty` is a supported key type | 1 site |
+| `TR-SIG-005` | a signature that cannot be checked fails rather than going unverified | 1 site |
+| `TR-ANC-001` | a transparency URI that cannot be parsed fails cleanly | 1 site |
 
-Rewriting any of these so it can never fail leaves the suite green.
+`tr_txn` and `tr_sca` had no unit tests at all, which is why every one of their failure
+paths measured zero. `TR-TXN-001` carried the most weight: it is the Level 2 requirement
+that a tool transcript exist, and nothing else in the suite enforced it.
+
+**Counting by check understates the problem by more than threefold.** A check code emitted
+from three places can have one failure path nothing verifies while the other two are
+covered, and still count as verified. The sites are where the checks actually live.
 
 `TR-TXN-001` carries the most weight. It is the Level 2 requirement that a tool
 transcript exist at all. If it regressed, implementations would continue to be stamped
@@ -113,6 +122,21 @@ is the property. The two are not related closely enough to substitute one for th
   green, and would have been recorded as evidence for the opposite of the truth.
 - **An empty site list would report perfect coverage.** Zero sites is a hard stop.
 - **Restoration is verified**, not assumed, after every site.
+- **A suite that did not run against this code looks exactly like a suite that notices
+  nothing.** A stale editable install, or any `trace_tests` earlier on `sys.path`, leaves
+  the baseline green and every mutation unobserved: pytest never imports the file being
+  rewritten, so the run reports zero verified. The import path is resolved and checked
+  against this checkout before the baseline runs.
+- **A stale `__pycache__` reports a margin the code does not have.** `Status.FAIL` and
+  `Status.PASS` are the same length, so a rewrite changes no file size, and a run can end
+  up measuring the previous iteration's bytecode. This is the worst of the guards to be
+  missing, because it fails *upward*: the previous iteration's failures are attributed to
+  the site under mutation, margins come out larger than they are, and a check held by
+  exactly one test is reported as comfortably covered. Caches are purged before every
+  suite run. Without the purge, four consecutive runs on one unchanged tree reported the
+  margin-1 watch list as empty three times and as two entries once; the list has eight
+  entries. A fourth run also left `pytest` failing on 14 tests against a tree `git status`
+  reported as clean.
 - **An empty path is rejected before it can look valid.** `Path("")` is `.`, which is a
   directory, so the obvious existence check passes and the script measures whichever tree
   it happens to be standing in. The enum comparison had exactly this hole and reported
@@ -135,15 +159,19 @@ is the property. The two are not related closely enough to substitute one for th
   fail together because they share a fixture are one test for this purpose, and this
   measurement does not distinguish that.
 - **Nothing here was reported upstream at the time of writing**, and nothing in
-  `trace-tests` was modified. The checkout was restored and re-verified green after every
-  mutation.
+  `trace-tests` was modified. Every mutated source file is restored, and the restoration
+  is verified, after every site. Restoring the *file* is not the same as leaving the
+  checkout usable: until caches were purged between runs, a completed run could leave
+  `pytest` failing against a tree `git status` reported as clean, because the interpreter
+  was still loading bytecode compiled from a mutated source. The cache purge above is what
+  makes "restored" mean what it reads as.
 
 ---
 
 ## Reproducing
 
 ```bash
-pip install -e ".[dev]" && pytest -q          # expect 118 passed, 5 xpassed
+pip install -e ".[dev]" && pytest -q          # expect 161 passed, 5 xpassed
 
 python measurement/scripts/mutate_modules.py  # exits 1 if any check is unguarded
 python measurement/scripts/enum_drift.py      # exits 1 on any drifted enum

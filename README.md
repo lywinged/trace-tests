@@ -23,7 +23,7 @@
 [![TRACE Spec](https://img.shields.io/badge/TRACE-Spec_v0.2-0ea5e9)](https://github.com/agentrust-io/trace-spec)
 [![Tests](https://img.shields.io/badge/Conformance_Tests-7_modules-green)]()
 [![CI](https://github.com/agentrust-io/trace-tests/actions/workflows/ci.yml/badge.svg)](https://github.com/agentrust-io/trace-tests/actions/workflows/ci.yml)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white&style=flat)](https://discord.gg/9JWNpH7E)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white&style=flat)](https://discord.gg/grgzFEHgkj)
 
 > **Test suite v0.2.** Tracks [TRACE Spec v0.2](https://github.com/agentrust-io/trace-spec).
 
@@ -34,9 +34,37 @@ Seven test modules covering the full specification: envelope structure, signatur
 ## Quick start
 
 ```bash
-pip install trace-tests
-trace-tests verify --record path/to/trust-record.jwt --level 1
+pip install agentrust-trace-tests
+trace-tests verify --record path/to/trust-record.jwt --level 1 \
+  --expected-nonce "$VERIFIER_CHALLENGE"
 ```
+
+## A report you can hand to someone else
+
+`verify` answers a question for the person running it. `report` produces an artifact for
+somebody who was not there: an auditor, a counterparty, an acquirer.
+
+```bash
+trace-tests report --record trust-record.json   --html report.html --json report.json --badge trace.svg
+```
+
+It runs **every** level up to `--max-level` rather than one, because the useful answer for
+a reader is the highest level the record reaches, not whether it cleared the level someone
+happened to pick. The HTML is self-contained: no scripts, no fonts, no external CSS, no
+badge service, nothing fetched at open time.
+
+Use `--fail-under 1` to gate CI on a level. Without it the command always exits `0`, which
+is what you want when you are producing an artifact rather than enforcing a threshold.
+
+**The report is not evidence, and it says so on its face.** It is unsigned HTML describing
+one run of one suite version, and anybody can edit it. So it carries the record's digest,
+the suite and library versions, and the exact command to reproduce the result. A reader who
+does not trust the sender is told, in the artifact, to go check the record instead. A
+conformance report that looks authoritative and cannot be checked is the same shape of
+thing as a control plane writing its own log.
+
+`report.json` is stable under `schema: agentrust-io/trace-tests/report/1` for dashboards
+and CI.
 
 ## Test modules
 

@@ -3,8 +3,11 @@
 ## Install
 
 ```bash
-pip install trace-tests
+pip install agentrust-trace-tests
 ```
+
+The distribution is `agentrust-trace-tests`; `trace-tests` is the command it
+installs. `pip install trace-tests` returns 404.
 
 ## Create a sample fixture
 
@@ -78,11 +81,33 @@ Level 0 is software-only (development). Level 1 requires TEE attestation. Level 
 
 ```bash
 trace-tests verify --record sample-record.json --level 0
-trace-tests verify --record sample-record.json --level 1
-trace-tests verify --record sample-record.json --level 2
+trace-tests verify --record sample-record.json --level 1 --expected-nonce "$VERIFIER_CHALLENGE"
+trace-tests verify --record sample-record.json --level 2 --expected-nonce "$VERIFIER_CHALLENGE"
 ```
 
 The sample fixture passes Level 0. Levels 1 and 2 will fail on runtime attestation and transparency fields — that is expected. See [Trust Levels](levels.md) for what each level requires.
+
+## Resolving the policy bundle
+
+If your record carries `policy.policy_uri`, TR-POL-003 can fetch the bundle and
+check that it has the digest `policy.bundle_hash` declares. Point `--policy-dir`
+at a directory holding a `resolutions.json` that maps each URI to a relative
+path inside it:
+
+```bash
+trace-tests verify --record sample-record.json --level 0 --policy-dir ./bundles
+```
+
+```text
+{
+  "https://policy.example.org/bundles/agent-v1.json": "agent-v1.json"
+}
+```
+
+Without `--policy-dir` the resolution part of the check skips, so verifying
+offline costs you nothing. A `policy_uri` that is malformed rather than
+unreachable is still reported either way: that is a defect in the record, not a
+fetch that failed.
 
 ## Exit codes
 
@@ -94,21 +119,26 @@ The sample fixture passes Level 0. Levels 1 and 2 will fail on runtime attestati
 
 ## Output format
 
-Each test emits a structured result:
+Each finding prints its **module**, its status, and its message:
 
 ```
-TR-ENV-001  PASS  EAT envelope: eat_profile present
-TR-SIG-001  PASS  Signature: Ed25519 algorithm confirmed
-TR-RTE-001  FAIL  Runtime: TEE measurement missing (required at level 1)
+  TR-ENV  PASS        eat_profile sentinel matches
+  TR-ENV  PASS        cnf.jwk.kty present ('EC')
+  TR-SIG  PASS        cnf.jwk key type is supported (kty='EC', crv='P-256')
+  TR-SIG  UNVERIFIED  TR-SIG-005: no signature present; this record is NOT cryptographically verified
+  TR-POL  PASS        policy.bundle_hash has valid digest format
 ```
 
-Error codes follow the form `TR-<MODULE>-<NNN>`.
+Error codes follow the form `TR-<MODULE>-<NNN>`. A failing or unverified finding
+carries its code at the front of the message; a passing one usually does not, so the
+module column is what identifies a `PASS`. The JSON and HTML reports carry the code as
+its own field for every finding.
 
 ## Next steps
 
 | What | Where |
 |------|-------|
-| Understand what each test checks | [Test Modules](modules/index.md) |
+| Understand what each test checks | [Test Modules](modules.md) |
 | Look up a specific error code | [Error Codes](error-codes.md) |
 | Write your own conformance tests | [Tutorial: Writing conformance tests](tutorials/writing-conformance-tests.md) |
 | Set up CI | [Tutorial: CI integration](tutorials/ci-integration.md) |

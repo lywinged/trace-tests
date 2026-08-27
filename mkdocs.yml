@@ -15,30 +15,33 @@ exclude_docs: |
   schemas/
   LICENSE
   NOTICE
+  README.md
   ANTITRUST.md
   ADOPTERS.md
   MAINTAINERS.md
   SECURITY.md
   CHARTER.md
-  CODE_OF_CONDUCT.md
   pyproject.toml
 
 theme:
   name: material
+  custom_dir: overrides
   font: false
+  logo: docs/assets/icon.svg
+  favicon: docs/assets/icon.svg
   palette:
-    - scheme: slate
-      primary: custom
-      accent: custom
-      toggle:
-        icon: material/brightness-7
-        name: Switch to light mode
     - scheme: default
       primary: custom
       accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to light mode
   features:
     - navigation.instant
     - navigation.instant.progress
@@ -59,6 +62,32 @@ theme:
 plugins:
   - search:
       lang: en
+  - llmstxt:
+      full_output: llms-full.txt
+      markdown_description: >-
+        TRACE Tests is the conformance suite for TRACE (Trust Runtime
+        Attestation and Compliance Evidence), the AgenTrust open standard for
+        signed, hardware-attested AI agent governance records. Use it to check
+        that your attestation receipts satisfy the specification, at each
+        conformance level, before shipping them to production.
+      sections:
+        Getting started:
+          - index.md
+          - docs/quickstart.md
+          - docs/levels.md
+        Test modules:
+          - docs/modules.md
+          - docs/modules/tr-env.md
+          - docs/modules/tr-sig.md
+          - docs/modules/tr-rte.md
+          - docs/modules/tr-pol.md
+          - docs/modules/tr-txn.md
+          - docs/modules/tr-anc.md
+          - docs/modules/tr-sca.md
+        Reference:
+          - docs/error-codes.md
+          - docs/tutorials/writing-conformance-tests.md
+          - docs/tutorials/ci-integration.md
   - minify:
       minify_html: true
   - mkdocstrings:
@@ -112,15 +141,18 @@ extra:
       link: https://github.com/agentrust-io/trace-tests
       name: trace-tests on GitHub
     - icon: fontawesome/brands/discord
-      link: https://discord.gg/9JWNpH7E
+      link: https://discord.gg/grgzFEHgkj
       name: Join the Discord
   generator: false
 
 extra_css:
-  - docs/stylesheets/extra.css
+  # Shared AgenTrust editorial design system. Deliberately the only stylesheet:
+  # a local override here is how this site drifted to the Material default
+  # violet last time. Change the shared file instead.
+  - https://agentrust-io.com/design-system.css
 
 nav:
-  - Home: README.md
+  - Home: index.md
   - Getting Started: docs/quickstart.md
   - Tutorials:
       - Writing conformance tests: docs/tutorials/writing-conformance-tests.md
@@ -136,9 +168,13 @@ nav:
       - Provenance (TR-SCA): docs/modules/tr-sca.md
   - Conformance Levels: docs/levels.md
   - Error Codes: docs/error-codes.md
+  - Self-verification: measurement/REPORT.md
   - Project:
+      - Sponsors: SPONSORS.md
       - Changelog: CHANGELOG.md
       - Contributing: CONTRIBUTING.md
+      - Code of Conduct: CODE_OF_CONDUCT.md
+      - Privacy: PRIVACY.md
 
 extra_javascript:
   - https://agentrust-io.com/supernav.js
